@@ -462,6 +462,19 @@ LICENSE_APPLIED=false
 
 if [[ -f wgcf-account.toml ]]; then
     info "$(msg "account_exists")"
+
+    # If account exists but profile doesn't, try to generate it
+    if [[ ! -f wgcf-profile.conf ]]; then
+        info "$(msg "trying_alternative")"
+        if manual_warp_register; then
+            ok "$(msg "account_created")"
+        else
+            # If manual registration fails, try wgcf generate as fallback
+            if ! wgcf generate &>/dev/null; then
+                warn "$(msg "config_gen_failed")"
+            fi
+        fi
+    fi
 else
     info "$(msg "registering")"
     info "$(msg "wgcf_binary_check")"
