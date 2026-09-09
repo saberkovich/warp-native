@@ -341,9 +341,8 @@ function manual_warp_register {
         fi
 
         if [[ -n "$account_id" && -n "$access_token" ]]; then
-            # Create wgcf-account.toml file (only Account section, no Peer section!)
+            # Create wgcf-account.toml file with correct format
             cat > wgcf-account.toml <<EOF
-[Account]
 access_token = "$access_token"
 device_id = "$account_id"
 license_key = ""
