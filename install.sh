@@ -332,15 +332,15 @@ function manual_warp_register {
         # Extract peer public key from config.peers array
         local peer_pubkey=$(echo "$response" | sed -n 's/.*"public_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
-        # Extract endpoint host and port
-        local endpoint_host=$(echo "$response" | sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-        local endpoint_v4=$(echo "$response" | sed -n 's/.*"v4"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        # Extract endpoint host - it's in format "host":"engage.cloudflareclient.com:2408"
+        local endpoint=$(echo "$response" | sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
-        # Extract port from v4 field (format: "IP:PORT")
-        local endpoint_port=$(echo "$endpoint_v4" | cut -d':' -f2)
-        [[ -z "$endpoint_port" ]] && endpoint_port="2408"
+        # If endpoint is empty, try alternative parsing
+        if [[ -z "$endpoint" ]]; then
+            endpoint="engage.cloudflareclient.com:2408"
+        fi
 
-        if [[ -n "$account_id" && -n "$access_token" && -n "$peer_pubkey" && -n "$endpoint_host" ]]; then
+        if [[ -n "$account_id" && -n "$access_token" && -n "$peer_pubkey" && -n "$endpoint" ]]; then
             # Create wgcf-account.toml file
             cat > wgcf-account.toml <<EOF
 [Account]
@@ -351,7 +351,7 @@ private_key = '$PRIVATE_KEY'
 
 [Peer]
 public_key = '$peer_pubkey'
-endpoint = '$endpoint_host:$endpoint_port'
+endpoint = '$endpoint'
 EOF
             rm -f /tmp/warp-register-response.json
             return 0
