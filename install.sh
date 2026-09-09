@@ -333,8 +333,14 @@ function manual_warp_register {
         # Extract WireGuard configuration data from response
         local peer_pubkey=$(echo "$response" | sed -n 's/.*"public_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
         local endpoint=$(echo "$response" | sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-        local client_ipv4=$(echo "$response" | sed -n 's/.*"v4"[[:space:]]*:[[:space:]]*"\([0-9.\/]*\)".*/\1/p' | grep -o '[0-9.]*\/[0-9]*' | head -1)
-        local client_ipv6=$(echo "$response" | sed -n 's/.*"v6"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+        # Extract IP addresses from config.interface.addresses
+        local client_ipv4=$(echo "$response" | grep -o '"addresses"[[:space:]]*:[[:space:]]*{[^}]*"v4"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -n 's/.*"v4"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local client_ipv6=$(echo "$response" | grep -o '"addresses"[[:space:]]*:[[:space:]]*{[^}]*"v6"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -n 's/.*"v6"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+
+        # Add CIDR notation
+        [[ -n "$client_ipv4" ]] && client_ipv4="${client_ipv4}/32"
+        [[ -n "$client_ipv6" ]] && client_ipv6="${client_ipv6}/128"
 
         if [[ -n "$device_id" && -n "$access_token" && -n "$peer_pubkey" && -n "$endpoint" && -n "$client_ipv4" ]]; then
             # Create wgcf-account.toml file with correct format
