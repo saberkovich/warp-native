@@ -330,24 +330,33 @@ function manual_warp_register {
         local device_id=$(echo "$response" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
         local access_token=$(echo "$response" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
-        # Extract peer public key from config.peers array
+        # Extract WireGuard configuration data from response
         local peer_pubkey=$(echo "$response" | sed -n 's/.*"public_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-
-        # Extract endpoint host - it's in format "host":"engage.cloudflareclient.com:2408"
         local endpoint=$(echo "$response" | sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        local client_ipv4=$(echo "$response" | sed -n 's/.*"v4"[[:space:]]*:[[:space:]]*"\([0-9.\/]*\)".*/\1/p' | grep -o '[0-9.]*\/[0-9]*' | head -1)
+        local client_ipv6=$(echo "$response" | sed -n 's/.*"v6"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
-        # If endpoint is empty, try alternative parsing
-        if [[ -z "$endpoint" ]]; then
-            endpoint="engage.cloudflareclient.com:2408"
-        fi
-
-        if [[ -n "$device_id" && -n "$access_token" ]]; then
+        if [[ -n "$device_id" && -n "$access_token" && -n "$peer_pubkey" && -n "$endpoint" && -n "$client_ipv4" ]]; then
             # Create wgcf-account.toml file with correct format
             cat > wgcf-account.toml <<EOF
 access_token = "$access_token"
 device_id = "$device_id"
 license_key = ""
 private_key = "$PRIVATE_KEY"
+EOF
+
+            # Create wgcf-profile.conf directly from API response
+            cat > wgcf-profile.conf <<EOF
+[Interface]
+PrivateKey = $PRIVATE_KEY
+Address = ${client_ipv4}${client_ipv6:+, $client_ipv6}
+DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001
+MTU = 1280
+
+[Peer]
+PublicKey = $peer_pubkey
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = $endpoint
 EOF
             rm -f /tmp/warp-register-response.json
             return 0
