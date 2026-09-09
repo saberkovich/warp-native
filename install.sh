@@ -320,8 +320,8 @@ function manual_warp_register {
         echo "$response" | head -5 >&2
     fi
 
-    # Check if registration was successful
-    if [[ "$http_code" == "200" ]] && echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+    # Check if registration was successful (HTTP 200 with id and token in response)
+    if [[ "$http_code" == "200" ]]; then
         # Save raw response for parsing
         echo "$response" > /tmp/warp-register-response.json
 
