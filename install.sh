@@ -326,7 +326,8 @@ function manual_warp_register {
         echo "$response" > /tmp/warp-register-response.json
 
         # Extract account data from response using more robust parsing
-        local account_id=$(echo "$response" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        # device_id is the top-level "id" field (device ID), not account.id
+        local device_id=$(echo "$response" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
         local access_token=$(echo "$response" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
         # Extract peer public key from config.peers array
@@ -340,11 +341,11 @@ function manual_warp_register {
             endpoint="engage.cloudflareclient.com:2408"
         fi
 
-        if [[ -n "$account_id" && -n "$access_token" ]]; then
+        if [[ -n "$device_id" && -n "$access_token" ]]; then
             # Create wgcf-account.toml file with correct format
             cat > wgcf-account.toml <<EOF
 access_token = "$access_token"
-device_id = "$account_id"
+device_id = "$device_id"
 license_key = ""
 private_key = "$PRIVATE_KEY"
 EOF
