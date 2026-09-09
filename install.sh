@@ -284,6 +284,15 @@ function manual_warp_register {
     local FCM_TOKEN="${INSTALL_ID}:APA91b$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 134)"
     local TOS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
+    # Detect VPS country code for locale
+    local COUNTRY_CODE=$(curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep 'loc=' | cut -d'=' -f2)
+    if [[ -z "$COUNTRY_CODE" ]]; then
+        COUNTRY_CODE="US"  # Fallback to US if detection fails
+    fi
+
+    # Map country code to locale (country_COUNTRY format)
+    local LOCALE="en_${COUNTRY_CODE}"
+
     # Generate WireGuard keys
     local PRIVATE_KEY=$(wg genkey 2>/dev/null)
     if [[ -z "$PRIVATE_KEY" ]]; then
@@ -304,7 +313,7 @@ function manual_warp_register {
             \"fcm_token\":\"$FCM_TOKEN\",
             \"install_id\":\"$INSTALL_ID\",
             \"key\":\"$PUBLIC_KEY\",
-            \"locale\":\"en_US\",
+            \"locale\":\"$LOCALE\",
             \"model\":\"Android\",
             \"tos\":\"$TOS\",
             \"type\":\"Android\"
