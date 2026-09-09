@@ -276,6 +276,76 @@ function try_register {
     return $ret
 }
 
+function manual_warp_register {
+    # Alternative registration method using curl with non-empty install_id and fcm_token
+    # This works around the HTTP 429 issue with current wgcf versions
+
+    local INSTALL_ID=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 22)
+    local FCM_TOKEN="${INSTALL_ID}:APA91b$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 134)"
+    local TOS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+
+    # Generate WireGuard keys
+    local PRIVATE_KEY=$(wg genkey)
+    local PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
+
+    # Make registration request
+    local response=$(curl -s --max-time 30 --http1.1 \
+        -X POST \
+        'https://api.cloudflareclient.com/v0a1922/reg' \
+        -H 'User-Agent: okhttp/3.12.1' \
+        -H 'CF-Client-Version: a-6.3-1922' \
+        -H 'Content-Type: application/json' \
+        --data "{
+            \"fcm_token\":\"$FCM_TOKEN\",
+            \"install_id\":\"$INSTALL_ID\",
+            \"key\":\"$PUBLIC_KEY\",
+            \"locale\":\"en_US\",
+            \"model\":\"Android\",
+            \"tos\":\"$TOS\",
+            \"type\":\"Android\"
+        }")
+
+    # Check if registration was successful
+    if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        # Save raw response for parsing
+        echo "$response" > /tmp/warp-register-response.json
+
+        # Extract account data from response using more robust parsing
+        local account_id=$(echo "$response" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        local access_token=$(echo "$response" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+        # Extract peer public key from config.peers array
+        local peer_pubkey=$(echo "$response" | sed -n 's/.*"public_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+        # Extract endpoint host and port
+        local endpoint_host=$(echo "$response" | sed -n 's/.*"host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+        local endpoint_v4=$(echo "$response" | sed -n 's/.*"v4"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+        # Extract port from v4 field (format: "IP:PORT")
+        local endpoint_port=$(echo "$endpoint_v4" | cut -d':' -f2)
+        [[ -z "$endpoint_port" ]] && endpoint_port="2408"
+
+        if [[ -n "$account_id" && -n "$access_token" && -n "$peer_pubkey" && -n "$endpoint_host" ]]; then
+            # Create wgcf-account.toml file
+            cat > wgcf-account.toml <<EOF
+[Account]
+access_token = '$access_token'
+device_id = '$account_id'
+license_key = ''
+private_key = '$PRIVATE_KEY'
+
+[Peer]
+public_key = '$peer_pubkey'
+endpoint = '$endpoint_host:$endpoint_port'
+EOF
+            rm -f /tmp/warp-register-response.json
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 RESTORE_DNS_REQUIRED=false
 
 function restore_dns {
@@ -378,10 +448,10 @@ else
     
     output=$(try_register)
     ret=$?
-    
+
     if [[ $ret -ne 0 ]]; then
         warn "$(msg "register_error") $ret."
-        
+
         if [[ $ret -eq 126 ]]; then
             warn "$(msg "wgcf_not_executable")"
         elif [[ $ret -eq 124 ]]; then
@@ -391,6 +461,12 @@ else
             info "$(msg "known_behavior")"
         elif [[ "$output" == *"429"* || "$output" == *"Too Many Requests"* ]]; then
             warn "$(msg "cf_rate_limited")"
+            info "$(msg "trying_alternative")"
+            if manual_warp_register; then
+                ok "$(msg "account_created")"
+            else
+                warn "Manual registration also failed."
+            fi
         elif [[ "$output" == *"403"* || "$output" == *"Forbidden"* ]]; then
             warn "$(msg "cf_forbidden")"
         elif [[ "$output" == *"network"* || "$output" == *"connection"* ]]; then
@@ -399,10 +475,17 @@ else
             warn "$(msg "unknown_error")"
             echo "$output"
         fi
-        
-        info "$(msg "trying_alternative")"
-        try_register &>/dev/null || true
-        sleep 2
+
+        # If still not registered, try alternative method as last resort
+        if [[ ! -f wgcf-account.toml ]]; then
+            info "$(msg "trying_alternative")"
+            if manual_warp_register; then
+                ok "Manual registration successful"
+            else
+                try_register &>/dev/null || true
+            fi
+            sleep 2
+        fi
     fi
     
     if [[ ! -f wgcf-account.toml ]]; then
