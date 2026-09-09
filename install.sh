@@ -523,8 +523,13 @@ else
     info "$(msg "account_created")"
 fi
 
-wgcf generate &>/dev/null || error_exit "$(msg "config_gen_failed")"
-ok "$(msg "config_generated")"
+# Generate config only if it doesn't exist (manual_warp_register already creates it)
+if [[ ! -f wgcf-profile.conf ]]; then
+    wgcf generate &>/dev/null || error_exit "$(msg "config_gen_failed")"
+    ok "$(msg "config_generated")"
+else
+    ok "$(msg "config_generated")"
+fi
 echo ""
 
 if [[ -n "$WARP_LICENSE" ]]; then
