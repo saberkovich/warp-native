@@ -340,18 +340,14 @@ function manual_warp_register {
             endpoint="engage.cloudflareclient.com:2408"
         fi
 
-        if [[ -n "$account_id" && -n "$access_token" && -n "$peer_pubkey" && -n "$endpoint" ]]; then
-            # Create wgcf-account.toml file (without quotes around values - TOML format)
+        if [[ -n "$account_id" && -n "$access_token" ]]; then
+            # Create wgcf-account.toml file (only Account section, no Peer section!)
             cat > wgcf-account.toml <<EOF
 [Account]
 access_token = "$access_token"
 device_id = "$account_id"
 license_key = ""
 private_key = "$PRIVATE_KEY"
-
-[Peer]
-public_key = "$peer_pubkey"
-endpoint = "$endpoint"
 EOF
             rm -f /tmp/warp-register-response.json
             return 0
