@@ -285,11 +285,16 @@ function manual_warp_register {
     local TOS=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
     # Generate WireGuard keys
-    local PRIVATE_KEY=$(wg genkey)
-    local PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
+    local PRIVATE_KEY=$(wg genkey 2>/dev/null)
+    if [[ -z "$PRIVATE_KEY" ]]; then
+        warn "Failed to generate WireGuard keys. Is wireguard-tools installed?"
+        return 1
+    fi
+    local PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey 2>/dev/null)
 
-    # Make registration request
-    local response=$(curl -s --max-time 30 --http1.1 \
+    # Make registration request with HTTP code capture
+    local http_response=$(curl -s --max-time 30 --http1.1 \
+        -w "\nHTTP_STATUS:%{http_code}" \
         -X POST \
         'https://api.cloudflareclient.com/v0a1922/reg' \
         -H 'User-Agent: okhttp/3.12.1' \
@@ -305,8 +310,18 @@ function manual_warp_register {
             \"type\":\"Android\"
         }")
 
+    # Extract HTTP status code
+    local http_code=$(echo "$http_response" | grep "HTTP_STATUS:" | cut -d':' -f2)
+    local response=$(echo "$http_response" | sed '/HTTP_STATUS:/d')
+
+    # Debug: log response for troubleshooting
+    if [[ "$http_code" != "200" ]]; then
+        warn "Manual registration received HTTP $http_code"
+        echo "$response" | head -5 >&2
+    fi
+
     # Check if registration was successful
-    if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+    if [[ "$http_code" == "200" ]] && echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         # Save raw response for parsing
         echo "$response" > /tmp/warp-register-response.json
 
@@ -340,6 +355,8 @@ endpoint = '$endpoint_host:$endpoint_port'
 EOF
             rm -f /tmp/warp-register-response.json
             return 0
+        else
+            warn "Failed to extract required fields from API response"
         fi
     fi
 
